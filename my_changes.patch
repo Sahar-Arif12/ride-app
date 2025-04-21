@@ -1,0 +1,257 @@
+diff --git a/assets/rides.json b/assets/rides.json
+index da16fdd..05bc040 100644
+--- a/assets/rides.json
++++ b/assets/rides.json
+@@ -34,7 +34,7 @@
+       "pickupLocationText": "456 Elm St",
+       "dropOffLocationText": "789 Oak St",
+       "priceText": "$15.00"
+-    }
++    },
+     {
+       "imageUrl": "https://example.com/image5.jpg",
+       "creationTime": "2023-04-19T12:00:00.000Z",
+diff --git a/lib/features/ride_history/data/datasources/ride_local_datasource.dart b/lib/features/ride_history/data/datasources/ride_local_datasource.dart
+index cdddff1..0d10023 100644
+--- a/lib/features/ride_history/data/datasources/ride_local_datasource.dart
++++ b/lib/features/ride_history/data/datasources/ride_local_datasource.dart
+@@ -3,9 +3,28 @@ import 'package:flutter/services.dart';
+ import '../models/ride_model.dart';
+ 
+ class RideLocalDataSource {
+-  Future<List<RideModel>> getRidesFromJson() async {
++ Future<List<RideModel>> getRidesFromJson() async {
++  try {
++    // Print the available assets to check if your file is accessible
++    print("Attempting to load rides.json");
++    
+     final jsonString = await rootBundle.loadString('assets/rides.json');
++    print("JSON loaded, length: ${jsonString.length}");
++    
+     final List<dynamic> decoded = json.decode(jsonString);
+-    return decoded.map((e) => RideModel.fromJson(e)).toList();
++    print("JSON decoded, found ${decoded.length} items");
++    
++    final models = decoded.map((e) => RideModel.fromJson(e)).toList();
++    print("Created ${models.length} ride models");
++    
++    return models;
++  } catch (e, stackTrace) {
++    print('Error loading rides from JSON: $e');
++    print('Stack trace: $stackTrace');
++    
++    // Re-throw for debugging in development
++    // In production, you might want to return [] instead
++    throw e;
+   }
+ }
++}
+diff --git a/lib/features/ride_history/data/models/ride_model.dart b/lib/features/ride_history/data/models/ride_model.dart
+index 0089d0d..9aec2de 100644
+--- a/lib/features/ride_history/data/models/ride_model.dart
++++ b/lib/features/ride_history/data/models/ride_model.dart
+@@ -15,15 +15,15 @@ class RideModel {
+     required this.priceText,
+   });
+ 
+-  factory RideModel.fromJson(Map<String, dynamic> json) {
+-    return RideModel(
+-      imageUrl: json['imageUrl'],
+-      creationTime: DateTime.parse(json['creationTime']),
+-      pickupLocationText: json['pickupLocationText'],
+-      dropOffLocationText: json['dropOffLocationText'],
+-      priceText: json['priceText'],
+-    );
+-  }
++ factory RideModel.fromJson(Map<String, dynamic> json) {
++  return RideModel(
++    imageUrl: json['imageUrl'] ?? '',
++    creationTime: DateTime.tryParse(json['creationTime'] ?? '') ?? DateTime.now(),
++    pickupLocationText: json['pickupLocationText'] ?? '',
++    dropOffLocationText: json['dropOffLocationText'] ?? '',
++    priceText: json['priceText'] ?? '',
++  );
++}
+ 
+ Ride toEntity() {
+   return Ride(
+diff --git a/lib/features/ride_history/domain/usecases/get_rides_grouped_by_date.dart b/lib/features/ride_history/domain/usecases/get_rides_grouped_by_date.dart
+index 375956e..17bc68b 100644
+--- a/lib/features/ride_history/domain/usecases/get_rides_grouped_by_date.dart
++++ b/lib/features/ride_history/domain/usecases/get_rides_grouped_by_date.dart
+@@ -1,6 +1,4 @@
+-
+ import 'package:ride_app/features/ride_history/domain/models/grouped_rides.dart';
+-
+ import '../entities/ride.dart';
+ import '../repositories/ride_repository.dart';
+ 
+@@ -8,30 +6,69 @@ class GetRidesGroupedByDate {
+   final RideRepository repository;
+ 
+   GetRidesGroupedByDate(this.repository);
+-
+-  Future<List<GroupedRides>> call() async {
++Future<List<GroupedRides>> call() async {
++  try {
+     final rides = await repository.getRides();
+ 
+-    final grouped = <String, List<Ride>>{};
++    if (rides.isEmpty) {
++      return [];
++    }
++    
+ 
++    final Map<String, List<Ride>> grouped = {};
++   
+     for (var ride in rides) {
+-      final date = "${ride.creationTime.day} "
+-                   "${_monthName(ride.creationTime.month)}";
++   
++      final dateTime = ride.creationTime;
++      if (dateTime == null) continue;
++      
++      final date = "${dateTime.day} ${_monthName(dateTime.month)}";
++      
+ 
+-      grouped.putIfAbsent(date, () => []).add(ride);
++      (grouped[date] ??= []).add(ride);
+     }
++    
+ 
+-    return grouped.entries.map((e) => GroupedRides(
+-      dateLabel: e.key,
+-      rides: e.value,
+-    )).toList();
+-  }
++    final result = grouped.entries.map((entry) {
++      return GroupedRides(
++        dateLabel: entry.key,
++        rides: entry.value..sort((a, b) {
++   
++          final aTime = a.creationTime ?? DateTime.fromMillisecondsSinceEpoch(0);
++          final bTime = b.creationTime ?? DateTime.fromMillisecondsSinceEpoch(0);
++          return bTime.compareTo(aTime); 
++        }),
++      );
++    }).toList();
++    
+ 
+-  String _monthName(int month) {
+-    const months = [
+-      '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+-    ];
+-    return months[month];
++    result.sort((a, b) {
++      
++      final aRides = a.rides;
++      final bRides = b.rides;
++      
++      if (aRides.isEmpty && bRides.isEmpty) return 0;
++      if (aRides.isEmpty) return 1;
++      if (bRides.isEmpty) return -1;
++      
++      final aTime = aRides.first.creationTime ?? DateTime.fromMillisecondsSinceEpoch(0);
++      final bTime = bRides.first.creationTime ?? DateTime.fromMillisecondsSinceEpoch(0);
++      
++      return bTime.compareTo(aTime); // Newest first
++    });
++    
++    return result;
++  } catch (e) {
++    print('Error grouping rides: $e');
++    return [];
+   }
+ }
++
++String _monthName(int month) {
++  const months = [
++    '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
++    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
++  ];
++  return months[month >= 1 && month <= 12 ? month : 1];
++}
++}
+\ No newline at end of file
+diff --git a/lib/features/ride_history/presentation/bloc/ride_bloc.dart b/lib/features/ride_history/presentation/bloc/ride_bloc.dart
+index 376c227..febe9ef 100644
+--- a/lib/features/ride_history/presentation/bloc/ride_bloc.dart
++++ b/lib/features/ride_history/presentation/bloc/ride_bloc.dart
+@@ -13,10 +13,15 @@ class RideBloc extends Bloc<RideEvent, RideState> {
+       emit(RideLoading());
+       try {
+         final grouped = await getRidesGroupedByDate();
+-        emit(RideLoaded(grouped));
+-      } catch (_) {
+-        emit(RideError('Failed to load ride history'));
++        if (grouped.isEmpty) {
++          emit(RideError('No rides found'));
++        } else {
++          emit(RideLoaded(grouped));
++        }
++      } catch (e) {
++        print('Error in RideBloc: $e');
++        emit(RideError('Failed to load ride history: ${e.toString()}'));
+       }
+     });
+   }
+-}
++}
+\ No newline at end of file
+diff --git a/lib/main.dart b/lib/main.dart
+index d2efebb..d3b6fab 100644
+--- a/lib/main.dart
++++ b/lib/main.dart
+@@ -9,26 +9,35 @@ import 'package:ride_app/features/ride_history/presentation/screens/ride_history
+ 
+ 
+ void main() {
+-  final localDataSource = RideLocalDataSource();
+-  final repository = RideRepositoryImpl(localDataSource);
+-  final getRidesGroupedByDate = GetRidesGroupedByDate(repository);
+-
+-  runApp(MyApp(getRidesGroupedByDate));
++  runApp(MyApp());
+ }
+ 
+ class MyApp extends StatelessWidget {
+-  final GetRidesGroupedByDate getRidesGroupedByDate;
+-
+-  const MyApp(this.getRidesGroupedByDate, {super.key});
+-
+   @override
+   Widget build(BuildContext context) {
+-    return MaterialApp(
+-      debugShowCheckedModeBanner: false,
+-      home: BlocProvider(
+-        create: (_) => RideBloc(getRidesGroupedByDate)..add(LoadRides()),
+-        child: const RideHistoryScreen(),
++    return MultiBlocProvider(
++      providers: [
++        BlocProvider<RideBloc>(
++          create: (context) {
++            // Setup dependencies
++            final dataSource = RideLocalDataSource();
++            final repository = RideRepositoryImpl(dataSource);
++            final useCase = GetRidesGroupedByDate(repository);
++            
++            // Create bloc and immediately load rides
++            final bloc = RideBloc(useCase);
++            bloc.add(LoadRides());
++            return bloc;
++          },
++        ),
++      ],
++      child: MaterialApp(
++        title: 'Ride History App',
++        theme: ThemeData(
++          primarySwatch: Colors.blue,
++        ),
++        home: const RideHistoryScreen(),
+       ),
+     );
+   }
+-}
++}
+\ No newline at end of file

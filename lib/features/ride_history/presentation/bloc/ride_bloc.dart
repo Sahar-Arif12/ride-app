@@ -13,9 +13,14 @@ class RideBloc extends Bloc<RideEvent, RideState> {
       emit(RideLoading());
       try {
         final grouped = await getRidesGroupedByDate();
-        emit(RideLoaded(grouped));
-      } catch (_) {
-        emit(RideError('Failed to load ride history'));
+        if (grouped.isEmpty) {
+          emit(RideError('No rides found'));
+        } else {
+          emit(RideLoaded(grouped));
+        }
+      } catch (e) {
+        print('Error in RideBloc: $e');
+        emit(RideError('Failed to load ride history: ${e.toString()}'));
       }
     });
   }

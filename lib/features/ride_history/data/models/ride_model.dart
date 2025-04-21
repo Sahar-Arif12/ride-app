@@ -15,15 +15,15 @@ class RideModel {
     required this.priceText,
   });
 
-  factory RideModel.fromJson(Map<String, dynamic> json) {
-    return RideModel(
-      imageUrl: json['imageUrl'],
-      creationTime: DateTime.parse(json['creationTime']),
-      pickupLocationText: json['pickupLocationText'],
-      dropOffLocationText: json['dropOffLocationText'],
-      priceText: json['priceText'],
-    );
-  }
+ factory RideModel.fromJson(Map<String, dynamic> json) {
+  return RideModel(
+    imageUrl: json['imageUrl'] ?? '',
+    creationTime: DateTime.tryParse(json['creationTime'] ?? '') ?? DateTime.now(),
+    pickupLocationText: json['pickupLocationText'] ?? '',
+    dropOffLocationText: json['dropOffLocationText'] ?? '',
+    priceText: json['priceText'] ?? '',
+  );
+}
 
 Ride toEntity() {
   return Ride(

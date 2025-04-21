@@ -34,7 +34,7 @@
       "pickupLocationText": "456 Elm St",
       "dropOffLocationText": "789 Oak St",
       "priceText": "$15.00"
-    }
+    },
     {
       "imageUrl": "https://example.com/image5.jpg",
       "creationTime": "2023-04-19T12:00:00.000Z",
